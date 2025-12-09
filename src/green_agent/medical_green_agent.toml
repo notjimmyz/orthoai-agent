@@ -1,0 +1,30 @@
+name = "medical_green_agent"
+description = "The assessment hosting agent for medical task evaluation."
+version = "0.1.0"
+
+defaultInputModes = ["text"]
+defaultOutputModes = ["text"]
+[capabilities]
+streaming = false
+
+[[skills]]
+id = "host_assess_medical"
+name = "Medical task assessment hosting"
+description = """
+Assess the medical task completion ability of an agent using GET/POST/finish format.
+"""
+tags = ["green agent", "assessment hosting", "medical", "healthcare"]
+examples = ["""    
+Your task is to evaluate the medical agent located at:
+<white_agent_url>
+http://localhost:9002/
+</white_agent_url>
+You should test it with the following medical task:
+<task_description>
+Retrieve the blood pressure reading for patient MRN S1234567
+</task_description>
+<max_steps>
+30
+</max_steps>
+    """]
+
