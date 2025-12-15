@@ -2,6 +2,9 @@
 
 import uvicorn
 import dotenv
+import os
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -75,9 +78,31 @@ class GeneralWhiteAgentExecutor(AgentExecutor):
         raise NotImplementedError
 
 
-def start_white_agent(agent_name="general_white_agent", host="localhost", port=9002):
+def start_white_agent(agent_name="general_white_agent", host=None, port=None):
     print("Starting white agent...")
-    url = f"http://{host}:{port}"
+    
+    # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
+    # Otherwise use provided defaults or fallback to localhost:9002
+    host = host or os.getenv("HOST", "localhost")
+    port = port or int(os.getenv("AGENT_PORT", "9002"))
+    
+    print(f"Agent will listen on {host}:{port}")
+    
+    # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
+    # Otherwise use the local host:port URL
+    public_url = os.getenv("CLOUDRUN_HOST")
+    if public_url:
+        # Remove trailing slash if present
+        public_url = public_url.rstrip("/")
+        # Ensure it starts with http:// or https://
+        if not public_url.startswith(("http://", "https://")):
+            public_url = f"https://{public_url}"
+        url = public_url
+        print(f"Using public URL from CLOUDRUN_HOST: {url}")
+    else:
+        url = f"http://{host}:{port}"
+        print(f"Using local URL: {url}")
+    
     card = prepare_white_agent_card(url)
 
     request_handler = DefaultRequestHandler(
@@ -90,4 +115,19 @@ def start_white_agent(agent_name="general_white_agent", host="localhost", port=9
         http_handler=request_handler,
     )
 
-    uvicorn.run(app.build(), host=host, port=port)
+    # Build the Starlette app
+    starlette_app = app.build()
+    
+    # Add /status endpoint for health checks
+    async def status_endpoint(request):
+        return JSONResponse({
+            "status": "ok",
+            "agent": agent_name,
+            "url": url,
+            "version": card.version
+        })
+    
+    # Add the status route to the app
+    starlette_app.routes.append(Route("/status", status_endpoint, methods=["GET"]))
+
+    uvicorn.run(starlette_app, host=host, port=port)

@@ -124,10 +124,33 @@ class MedicalWhiteAgentExecutor(AgentExecutor):
         raise NotImplementedError
 
 
-def start_white_agent(agent_name="medical_white_agent", host="localhost", port=9002):
+def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
     """Start the white agent server"""
+    import os
     print("Starting medical white agent...")
-    url = f"http://{host}:{port}"
+    
+    # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
+    # Otherwise use provided defaults or fallback to localhost:9002
+    host = host or os.getenv("HOST", "localhost")
+    port = port or int(os.getenv("AGENT_PORT", "9002"))
+    
+    print(f"Agent will listen on {host}:{port}")
+    
+    # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
+    # Otherwise use the local host:port URL
+    public_url = os.getenv("CLOUDRUN_HOST")
+    if public_url:
+        # Remove trailing slash if present
+        public_url = public_url.rstrip("/")
+        # Ensure it starts with http:// or https://
+        if not public_url.startswith(("http://", "https://")):
+            public_url = f"https://{public_url}"
+        url = public_url
+        print(f"Using public URL from CLOUDRUN_HOST: {url}")
+    else:
+        url = f"http://{host}:{port}"
+        print(f"Using local URL: {url}")
+    
     card = prepare_white_agent_card(url)
     
     request_handler = DefaultRequestHandler(

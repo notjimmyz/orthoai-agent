@@ -1,0 +1,8 @@
+tunnel: quick-tunnel
+credentials-file: /Users/amanshah/.cloudflared/credentials.json
+
+ingress:
+  - hostname: con-played-only-landing.trycloudflare.com
+    service: http://localhost:9001
+  - service: http_status:404
+

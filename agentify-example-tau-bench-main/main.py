@@ -28,5 +28,11 @@ def launch():
     asyncio.run(launch_evaluation())
 
 
+@app.command()
+def run():
+    """Run the green agent (alias for 'green' command)."""
+    start_green_agent()
+
+
 if __name__ == "__main__":
     app()

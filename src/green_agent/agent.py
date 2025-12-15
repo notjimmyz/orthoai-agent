@@ -369,11 +369,34 @@ class MedicalGreenAgentExecutor(AgentExecutor):
         raise NotImplementedError
 
 
-def start_green_agent(agent_name="medical_green_agent", host="localhost", port=9001):
+def start_green_agent(agent_name="medical_green_agent", host=None, port=None):
     """Start the green agent server"""
+    import os
     print("Starting medical green agent...")
     agent_card_dict = load_agent_card_toml(agent_name)
-    url = f"http://{host}:{port}"
+    
+    # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
+    # Otherwise use provided defaults or fallback to localhost:9001
+    host = host or os.getenv("HOST", "localhost")
+    port = port or int(os.getenv("AGENT_PORT", "9001"))
+    
+    print(f"Agent will listen on {host}:{port}")
+    
+    # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
+    # Otherwise use the local host:port URL
+    public_url = os.getenv("CLOUDRUN_HOST")
+    if public_url:
+        # Remove trailing slash if present
+        public_url = public_url.rstrip("/")
+        # Ensure it starts with http:// or https://
+        if not public_url.startswith(("http://", "https://")):
+            public_url = f"https://{public_url}"
+        url = public_url
+        print(f"Using public URL from CLOUDRUN_HOST: {url}")
+    else:
+        url = f"http://{host}:{port}"
+        print(f"Using local URL: {url}")
+    
     agent_card_dict["url"] = url
     
     request_handler = DefaultRequestHandler(
