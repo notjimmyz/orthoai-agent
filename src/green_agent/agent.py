@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -413,6 +415,21 @@ def start_green_agent(agent_name="medical_green_agent", host=None, port=None):
     
     # Build the Starlette app
     starlette_app = app.build()
+    
+    # Add security headers middleware to reduce browser warnings
+    class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            response = await call_next(request)
+            # Add security headers to reduce browser warnings
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+            return response
+    
+    # Add middleware
+    starlette_app.add_middleware(SecurityHeadersMiddleware)
     
     # Add /status endpoint for health checks
     async def status_endpoint(request):
