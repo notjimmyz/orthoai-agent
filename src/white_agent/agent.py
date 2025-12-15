@@ -3,6 +3,8 @@
 import uvicorn
 import dotenv
 from pathlib import Path
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -163,5 +165,20 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
         http_handler=request_handler,
     )
     
-    uvicorn.run(app.build(), host=host, port=port)
+    # Build the Starlette app
+    starlette_app = app.build()
+    
+    # Add /status endpoint for health checks
+    async def status_endpoint(request):
+        return JSONResponse({
+            "status": "ok",
+            "agent": agent_name,
+            "url": url,
+            "version": card.version
+        })
+    
+    # Add the status route to the app
+    starlette_app.routes.append(Route("/status", status_endpoint, methods=["GET"]))
+    
+    uvicorn.run(starlette_app, host=host, port=port)
 
