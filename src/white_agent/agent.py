@@ -132,11 +132,14 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
     print("Starting medical white agent...")
     
     # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
-    # Otherwise use provided defaults or fallback to localhost:9002
+    # Controller will automatically configure these environment variables when launching the agent
     host = host or os.getenv("HOST", "localhost")
-    port = port or int(os.getenv("AGENT_PORT", "9002"))
+    # Read AGENT_PORT from environment (set by controller), fallback to 9003 if not set
+    port = port or int(os.getenv("AGENT_PORT", "9003"))
     
     print(f"Agent will listen on {host}:{port}")
+    # Print port in a parseable format for controller (format: PORT=<port>)
+    print(f"PORT={port}", flush=True)
     
     # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
     # Otherwise use the local host:port URL
@@ -189,8 +192,16 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
             "version": card.version
         })
     
-    # Add the status route to the app (append like in the example)
+    # Add /port endpoint for controller to detect port
+    async def port_endpoint(request):
+        return JSONResponse({
+            "port": port,
+            "host": host
+        })
+    
+    # Add the routes to the app
     starlette_app.routes.append(Route("/status", status_endpoint, methods=["GET"]))
+    starlette_app.routes.append(Route("/port", port_endpoint, methods=["GET"]))
     
     uvicorn.run(starlette_app, host=host, port=port)
 

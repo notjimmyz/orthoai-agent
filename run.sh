@@ -1,15 +1,17 @@
 #!/bin/bash
 # Run script for the agent
 
-# Set Cloudflare tunnel URL
-# NOTE: Update this to match the URL that cloudflared gives you when you run:
-# cloudflared tunnel --url http://localhost:9001
-# The URL changes each time you create a new quick tunnel
-export CLOUDRUN_HOST=walt-adjustable-addressing-isle.trycloudflare.com
+# Set ngrok tunnel URL
+# NOTE: Update this to match the URL that ngrok gives you when you run:
+# ngrok http 8010
+# This should be the controller's tunnel URL (port 8010), not the agent port
+# The URL changes each time you create a new tunnel
+export CLOUDRUN_HOST=55c3b2b7f0c1.ngrok-free.app
 
-# Set controller port (for agentbeats controller)
-# export PORT=8030
+# Set agent port (controller should set this, but ensure it's set)
+export AGENT_PORT=9003
+export HOST=${HOST:-localhost}
 
-# Run the green agent
-uv run python main.py green
+# Run the white agent
+uv run python main.py white
 
