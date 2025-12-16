@@ -132,14 +132,11 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
     print("Starting medical white agent...")
     
     # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
-    # Controller will automatically configure these environment variables when launching the agent
+    # Otherwise use provided defaults or fallback to localhost:9002
     host = host or os.getenv("HOST", "localhost")
-    # Read AGENT_PORT from environment (set by controller), fallback to 9003 if not set
-    port = port or int(os.getenv("AGENT_PORT", "9003"))
+    port = port or int(os.getenv("AGENT_PORT", "9002"))
     
     print(f"Agent will listen on {host}:{port}")
-    # Print port in a parseable format for controller (format: PORT=<port>)
-    print(f"PORT={port}", flush=True)
     
     # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
     # Otherwise use the local host:port URL
@@ -171,18 +168,6 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
     # Build the Starlette app
     starlette_app = app.build()
     
-    # Debug: Print registered routes
-    print("Registered routes:")
-    for route in starlette_app.routes:
-        route_info = []
-        if hasattr(route, 'path'):
-            route_info.append(f"path={route.path}")
-        if hasattr(route, 'methods'):
-            route_info.append(f"methods={route.methods}")
-        if hasattr(route, '__class__'):
-            route_info.append(f"type={route.__class__.__name__}")
-        print(f"  {' | '.join(route_info)}")
-    
     # Add /status endpoint for health checks
     async def status_endpoint(request):
         return JSONResponse({
@@ -192,16 +177,8 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
             "version": card.version
         })
     
-    # Add /port endpoint for controller to detect port
-    async def port_endpoint(request):
-        return JSONResponse({
-            "port": port,
-            "host": host
-        })
-    
-    # Add the routes to the app
+    # Add the status route to the app
     starlette_app.routes.append(Route("/status", status_endpoint, methods=["GET"]))
-    starlette_app.routes.append(Route("/port", port_endpoint, methods=["GET"]))
     
     uvicorn.run(starlette_app, host=host, port=port)
 
