@@ -14,7 +14,9 @@ from a2a.types import AgentSkill, AgentCard, AgentCapabilities
 from a2a.utils import new_agent_text_message
 from litellm import completion
 
-dotenv.load_dotenv()
+# Load .env file from project root
+project_root = Path(__file__).parent.parent.parent
+dotenv.load_dotenv(project_root / ".env")
 
 
 def load_system_prompt():
@@ -90,10 +92,19 @@ class MedicalWhiteAgentExecutor(AgentExecutor):
         
         # Get response from LLM
         try:
+            import os
+            # Reload dotenv to ensure API key is loaded
+            dotenv.load_dotenv(project_root / ".env")
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is not set. Please check your .env file.")
+            
+            # Ensure API key is in environment for LiteLLM
+            os.environ["OPENAI_API_KEY"] = api_key
+            
             response = completion(
                 messages=messages,
                 model="openai/gpt-4o",
-                custom_llm_provider="openai",
                 temperature=0.0,
             )
             next_message = response.choices[0].message.content.strip()
@@ -129,14 +140,11 @@ class MedicalWhiteAgentExecutor(AgentExecutor):
 def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
     """Start the white agent server"""
     import os
-    print("Starting medical white agent...")
     
     # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
     # Otherwise use provided defaults or fallback to localhost:9002
     host = host or os.getenv("HOST", "localhost")
     port = port or int(os.getenv("AGENT_PORT", "9002"))
-    
-    print(f"Agent will listen on {host}:{port}")
     
     # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
     # Otherwise use the local host:port URL
@@ -148,10 +156,8 @@ def start_white_agent(agent_name="medical_white_agent", host=None, port=None):
         if not public_url.startswith(("http://", "https://")):
             public_url = f"https://{public_url}"
         url = public_url
-        print(f"Using public URL from CLOUDRUN_HOST: {url}")
     else:
         url = f"http://{host}:{port}"
-        print(f"Using local URL: {url}")
     
     card = prepare_white_agent_card(url)
     

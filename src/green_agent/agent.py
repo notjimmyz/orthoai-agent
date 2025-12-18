@@ -19,7 +19,9 @@ from a2a.utils import new_agent_text_message, get_text_parts
 from src.my_util import parse_tags, my_a2a
 from litellm import completion
 
-dotenv.load_dotenv()
+# Load .env file from project root
+project_root = Path(__file__).parent.parent.parent
+dotenv.load_dotenv(project_root / ".env")
 
 
 def load_system_prompt():
@@ -121,13 +123,42 @@ async def evaluate_white_agent(white_agent_url: str, task_description: str, max_
         }
     ]
     
-    # For demo, use first task or provided task
-    task = medical_tasks[0] if not task_description else {
-        "task_id": "custom_001",
-        "description": task_description,
-        "expected_answer": None,  # Will be computed by green agent
-        "api_base": "https://api.medical.example.com"
-    }
+    # Match task description to predefined tasks, or use custom task
+    task = None
+    
+    if task_description:
+        # Try to match task description to predefined tasks
+        task_description_lower = task_description.lower().strip()
+        
+        # First, try exact or substring matching with predefined tasks (most reliable)
+        for predefined_task in medical_tasks:
+            predefined_desc_lower = predefined_task["description"].lower()
+            # Check if descriptions match (either direction) - this is the most reliable
+            if (predefined_desc_lower in task_description_lower or 
+                task_description_lower in predefined_desc_lower):
+                task = predefined_task
+                break
+        
+        # If no exact match, try keyword matching
+        if task is None:
+            # Check for blood pressure task (med_001) - be more specific
+            if ("blood pressure" in task_description_lower or "bp" in task_description_lower) and "hemoglobin" not in task_description_lower:
+                task = medical_tasks[0]  # med_001
+            # Check for hemoglobin task (med_002)
+            elif "hemoglobin" in task_description_lower:
+                task = medical_tasks[1]  # med_002
+        
+        # If no match found, create custom task
+        if task is None:
+            task = {
+                "task_id": "custom_001",
+                "description": task_description,
+                "expected_answer": None,  # Will be computed by green agent
+                "api_base": "https://api.medical.example.com"
+            }
+    else:
+        # Use first predefined task if no description provided
+        task = medical_tasks[0]
     
     # Prepare task message for white agent
     task_message = f"""
@@ -155,17 +186,14 @@ Remember:
     
     try:
         # [1] Reset target agent
-        print("@@@ Green agent: Resetting white agent state...")
         try:
             reset_response = await my_a2a.send_message(
                 white_agent_url, "reset", context_id=None
             )
-            print("@@@ White agent reset confirmed")
-        except Exception as e:
-            print(f"@@@ Warning: Reset command failed (may not be supported): {e}")
+        except Exception:
+            pass  # Reset may not be supported
         
         # [2] Send task
-        print(f"@@@ Green agent: Sending task to white agent...")
         response = await my_a2a.send_message(white_agent_url, task_message, context_id=context_id)
         res_root = response.root
         assert isinstance(res_root, SendMessageSuccessResponse)
@@ -185,7 +213,6 @@ Remember:
             white_agent_output = white_text if not all_responses else "\n".join(all_responses) + "\n" + white_text
             all_responses.append(white_text)
             steps += 1
-            print(f"@@@ White agent response (step {steps}):\n{white_text}")
             
             # [4] Validate formatting
             current_format_valid = validate_response_format(white_text)
@@ -244,18 +271,47 @@ Remember:
                 
                 # Evaluate correctness
                 success = False
-                if task.get("expected_answer"):
+                
+                # Check if white agent returned error code
+                if isinstance(final_answer, list) and len(final_answer) > 0 and str(final_answer[0]) == "-1":
+                    success = False
+                elif task.get("expected_answer"):
                     # Compare with expected answer (flexible matching)
                     expected = task["expected_answer"]
-                    if isinstance(expected, list) and isinstance(final_answer, list):
-                        # Check if any expected value matches
-                        success = any(
-                            str(exp).lower().strip() in str(ans).lower() 
-                            or str(ans).lower().strip() in str(exp).lower()
-                            for exp in expected for ans in final_answer
-                        )
+                    
+                    # Normalize final_answer - handle both list and string
+                    if isinstance(final_answer, list):
+                        final_answer_str = " ".join(str(item) for item in final_answer)
                     else:
-                        success = str(final_answer).lower() == str(expected).lower()
+                        final_answer_str = str(final_answer)
+                    final_answer_str = final_answer_str.lower().strip()
+                    
+                    if isinstance(expected, list):
+                        # Check if any expected value matches (flexible substring matching)
+                        for exp in expected:
+                            exp_str = str(exp).lower().strip()
+                            # Remove units for more flexible matching
+                            exp_clean = exp_str.replace("mmhg", "").replace("g/dl", "").replace("/", "").strip()
+                            ans_clean = final_answer_str.replace("mmhg", "").replace("g/dl", "").replace("/", "").strip()
+                            
+                            # Check multiple matching strategies
+                            if (exp_str in final_answer_str or 
+                                final_answer_str in exp_str or
+                                exp_clean in ans_clean or
+                                ans_clean in exp_clean or
+                                any(part in final_answer_str for part in exp_str.split() if len(part) > 2)):
+                                success = True
+                                break
+                    else:
+                        # Single expected value
+                        exp_str = str(expected).lower().strip()
+                        exp_clean = exp_str.replace("mmhg", "").replace("g/dl", "").replace("/", "").strip()
+                        ans_clean = final_answer_str.replace("mmhg", "").replace("g/dl", "").replace("/", "").strip()
+                        
+                        success = (exp_str in final_answer_str or 
+                                  final_answer_str in exp_str or
+                                  exp_clean in ans_clean or
+                                  ans_clean in exp_clean)
                 else:
                     # Use LLM to evaluate if answer is reasonable
                     eval_prompt = f"""
@@ -266,13 +322,19 @@ Answer: {final_answer}
 Respond with only "CORRECT" or "INCORRECT".
 """
                     try:
-                        eval_response = completion(
-                            messages=[{"role": "user", "content": eval_prompt}],
-                            model="openai/gpt-4o-mini",
-                            temperature=0.0
-                        )
-                        eval_result = eval_response.choices[0].message.content.strip()
-                        success = "CORRECT" in eval_result.upper()
+                        # Reload dotenv to ensure API key is loaded
+                        dotenv.load_dotenv(project_root / ".env")
+                        import os
+                        if not os.getenv("OPENAI_API_KEY"):
+                            success = False
+                        else:
+                            eval_response = completion(
+                                messages=[{"role": "user", "content": eval_prompt}],
+                                model="openai/gpt-4o-mini",
+                                temperature=0.0
+                            )
+                            eval_result = eval_response.choices[0].message.content.strip()
+                            success = "CORRECT" in eval_result.upper()
                     except Exception:
                         success = False
                 
@@ -332,7 +394,6 @@ class MedicalGreenAgentExecutor(AgentExecutor):
     
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Execute evaluation task"""
-        print("Green agent: Received a task, parsing...")
         user_input = context.get_user_input()
         
         # Parse task description
@@ -347,22 +408,18 @@ class MedicalGreenAgentExecutor(AgentExecutor):
             )
             return
         
-        print(f"Green agent: Starting evaluation of white agent at {white_agent_url}...")
         timestamp_started = time.time()
         
         # Run evaluation
         result = await evaluate_white_agent(white_agent_url, task_description, max_steps)
         
         result["time_used"] = time.time() - timestamp_started
-        result_emoji = "✅" if result["success"] else "❌"
-        
-        print("Green agent: Evaluation complete.")
         
         # Return JSON result
         result_json = json.dumps(result, indent=2)
         await event_queue.enqueue_event(
             new_agent_text_message(
-                f"Evaluation Result: {result_emoji}\n\n{result_json}"
+                f"Evaluation Result:\n\n{result_json}"
             )
         )
     
@@ -374,15 +431,12 @@ class MedicalGreenAgentExecutor(AgentExecutor):
 def start_green_agent(agent_name="medical_green_agent", host=None, port=None):
     """Start the green agent server"""
     import os
-    print("Starting medical green agent...")
     agent_card_dict = load_agent_card_toml(agent_name)
     
     # Use HOST and AGENT_PORT environment variables if set (for AgentBeats controller)
     # Otherwise use provided defaults or fallback to localhost:9001
     host = host or os.getenv("HOST", "localhost")
     port = port or int(os.getenv("AGENT_PORT", "9001"))
-    
-    print(f"Agent will listen on {host}:{port}")
     
     # Use CLOUDRUN_HOST environment variable if set (for external/public URL)
     # Otherwise use the local host:port URL
@@ -394,10 +448,8 @@ def start_green_agent(agent_name="medical_green_agent", host=None, port=None):
         if not public_url.startswith(("http://", "https://")):
             public_url = f"https://{public_url}"
         url = public_url
-        print(f"Using public URL from CLOUDRUN_HOST: {url}")
     else:
         url = f"http://{host}:{port}"
-        print(f"Using local URL: {url}")
     
     agent_card_dict["url"] = url
     

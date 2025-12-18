@@ -83,6 +83,62 @@ def health():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/api/test-cases', methods=['GET'])
+def get_test_cases():
+    """Get predefined test cases for the demo"""
+    test_cases = [
+        {
+            "id": "med_001",
+            "name": "Blood Pressure Retrieval",
+            "description": "Retrieve the blood pressure reading for patient MRN S1234567",
+            "expected_answer": "118/77 mmHg",
+            "category": "vitals"
+        },
+        {
+            "id": "med_002",
+            "name": "Hemoglobin Lab Result",
+            "description": "Get the latest lab results for patient MRN S1234567, specifically the hemoglobin level",
+            "expected_answer": "14.2 g/dL",
+            "category": "labs"
+        }
+    ]
+    return jsonify({'test_cases': test_cases})
+
+
+@app.route('/api/run-evaluation', methods=['POST'])
+def run_evaluation():
+    """Trigger green agent to evaluate white agent"""
+    data = request.get_json()
+    green_agent_url = data.get('green_agent_url')
+    white_agent_url = data.get('white_agent_url')
+    task_description = data.get('task_description', 'Retrieve the blood pressure reading for patient MRN S1234567')
+    max_steps = int(data.get('max_steps', 30))
+    
+    if not green_agent_url or not white_agent_url:
+        return jsonify({'error': 'green_agent_url and white_agent_url required'}), 400
+    
+    try:
+        # Format the task message for the green agent
+        task_message = f"""
+Your task is to evaluate the medical agent located at:
+<white_agent_url>
+{white_agent_url}
+</white_agent_url>
+You should test it with the following medical task:
+<task_description>
+{task_description}
+</task_description>
+<max_steps>
+{max_steps}
+</max_steps>
+"""
+        
+        response_text = run_async(send_message_to_agent(green_agent_url, task_message))
+        return jsonify({'response': response_text})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = 5001  # Use 5001 to avoid conflict with macOS AirPlay on 5000
     print(f"Starting API server on http://localhost:{port}")

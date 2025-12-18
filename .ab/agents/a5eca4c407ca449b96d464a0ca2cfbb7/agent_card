@@ -1,0 +1,47 @@
+{
+  "additionalInterfaces": null,
+  "capabilities": {
+    "extensions": null,
+    "pushNotifications": null,
+    "stateTransitionHistory": null,
+    "streaming": false
+  },
+  "defaultInputModes": [
+    "text"
+  ],
+  "defaultOutputModes": [
+    "text"
+  ],
+  "description": "The assessment hosting agent for medical task evaluation.",
+  "documentationUrl": null,
+  "iconUrl": null,
+  "name": "medical_green_agent",
+  "preferredTransport": "JSONRPC",
+  "protocolVersion": "0.3.0",
+  "provider": null,
+  "security": null,
+  "securitySchemes": null,
+  "signatures": null,
+  "skills": [
+    {
+      "description": "Assess the medical task completion ability of an agent using GET/POST/finish format.\n",
+      "examples": [
+        "    \nYour task is to evaluate the medical agent located at:\n<white_agent_url>\nhttp://localhost:9002/\n</white_agent_url>\nYou should test it with the following medical task:\n<task_description>\nRetrieve the blood pressure reading for patient MRN S1234567\n</task_description>\n<max_steps>\n30\n</max_steps>\n    "
+      ],
+      "id": "host_assess_medical",
+      "inputModes": null,
+      "name": "Medical task assessment hosting",
+      "outputModes": null,
+      "security": null,
+      "tags": [
+        "green agent",
+        "assessment hosting",
+        "medical",
+        "healthcare"
+      ]
+    }
+  ],
+  "supportsAuthenticatedExtendedCard": null,
+  "url": "https://eafc0d2a7dd5.ngrok-free.app",
+  "version": "0.1.0"
+}
